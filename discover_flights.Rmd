@@ -1,0 +1,193 @@
+---
+title: "Discover Flights"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    vertical_layout: fill
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(tidyverse)
+library(lubridate)
+library(rvest)
+library(dplyr)
+library(esquisse)
+library(showtext)
+library(ggplot2)
+library(kableExtra)
+
+font_add_google(name = 'Noto Sans KR', family = 'Noto Sans KR')
+showtext_auto()
+
+flightinfo <- read.csv("Skyscanner(kisung_noh).csv")
+
+ticket.price2 <- flightinfo$ticket.price %>% gsub(",|₩","",.) %>% as.numeric()
+
+from.date2 <- flightinfo$from.date %>% ymd()
+to.date2 <- flightinfo$to.date %>% ymd()
+
+from.airlines2 <- flightinfo$from.airlines
+to.airlines2 <- flightinfo$to.airlines
+
+from.stop.city2 <- flightinfo$from.stop.city
+to.stop.city2 <- flightinfo$to.stop.city
+
+from.duration.hour <- flightinfo$from.duration %>% str_remove("\\d+분") %>% str_remove("시간") %>% as.numeric() %>% replace_na(0) %>% dhours()
+from.duration.min <- flightinfo$from.duration %>% str_remove("\\d+시간") %>% str_remove("분") %>% as.numeric() %>% replace_na(0) %>% dminutes()
+from.duration2 <- from.duration.hour+from.duration.min
+
+to.duration.hour <- flightinfo$to.duration %>% str_remove("\\d+분") %>% str_remove("시간") %>% as.numeric() %>% replace_na(0) %>% dhours()
+to.duration.min <- flightinfo$to.duration %>% str_remove("\\d+시간") %>% str_remove("분") %>% as.numeric() %>% replace_na(0) %>% dminutes()
+to.duration2 <- to.duration.hour+to.duration.min
+
+from.stop.duration.hour <- flightinfo$from.stop.duration %>% str_remove("\\d+분") %>% str_remove("시간") %>% as.numeric() %>% replace_na(0) %>% dhours()
+from.stop.duration.min <- flightinfo$from.stop.duration %>% str_remove("\\d+시간") %>% str_remove("분") %>% as.numeric() %>% replace_na(0) %>% dminutes()
+from.stop.duration2 <- from.stop.duration.hour+from.stop.duration.min
+
+to.stop.duration.hour <- flightinfo$to.stop.duration %>% str_remove("\\d+분") %>% str_remove("시간") %>% as.numeric() %>% replace_na(0) %>% dhours()
+to.stop.duration.min <- flightinfo$to.stop.duration %>% str_remove("\\d+시간") %>% str_remove("분") %>% as.numeric() %>% replace_na(0) %>% dminutes()
+to.stop.duration2 <- to.stop.duration.hour+to.stop.duration.min
+
+from.depart.time2 <- flightinfo$from.depart.time %>% str_replace("오전","AM") %>% str_replace("오후","PM") %>% strptime("%p %I:%M") %>% format(.,format="%H:%M")
+to.depart.time2 <- flightinfo$to.depart.time %>% str_replace("오전","AM") %>% str_replace("오후","PM") %>% strptime("%p %I:%M") %>% format(.,format="%H:%M")
+from.arrival.time2 <- flightinfo$from.arrival.time %>% str_replace("오전","AM") %>% str_replace("오후","PM") %>% strptime("%p %I:%M") %>% format(.,format="%H:%M")
+to.arrival.time2 <- flightinfo$to.arrival.time %>% str_replace("오전","AM") %>% str_replace("오후","PM") %>% strptime("%p %I:%M") %>% format(.,format="%H:%M")
+
+A <- NULL
+B <- NULL
+for (i in 1:length(from.airlines2)) {
+  if (from.airlines2[i] == to.airlines2[i]) {
+    A <- c(A, from.airlines2[i])
+  } else {
+    B <- str_c(from.airlines2[i], "/", to.airlines2[i])
+    A <- c(A, B)
+  }
+}
+airlines2 <- A %>% str_remove("\\(.*\\)") %>% str_trim()
+
+C <- NULL
+D <- NULL
+for (i in 1:length(from.stop.city2)) {
+  if (from.stop.city2[i] == to.stop.city2[i]) {
+    C <- c(C, from.stop.city2[i])
+  } else {
+    D <- str_c(from.stop.city2[i], "/", to.stop.city2[i])
+    C <- c(C, D)
+  }
+}
+stop.city2 <- C
+
+
+flightinfo2 <- cbind(flightinfo,from.date2,to.date2,ticket.price2,airlines2,from.duration2,to.duration2,stop.city2,from.stop.duration2,to.stop.duration2,from.depart.time2,to.depart.time2,from.arrival.time2,to.arrival.time2) %>% as_tibble()
+
+#항공기 구매 프로세스
+#제약조건:날짜>경유시간(24시간 이하)>전체시간(2개)>가격>출발시간(2개)>도착시간(2개)
+
+
+#최적항공권 상위10개 보여주기
+
+
+```
+
+Row {data-height=600}
+-----------------------------------------------------------------------
+
+###
+
+```{r}
+flightinfo2 %>%
+ ggplot() +
+  aes(x = from.date2, y = ticket.price2, colour = airlines2) +
+  geom_point(shape = "circle", size = 2.0) +
+  geom_smooth(span = 0.35) +
+  scale_color_hue(direction = 1) +
+  labs(x = "출발날짜", y = "가격", title = "서울 ~ 코펜하겐") +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    legend.title = element_text("항공사"),
+    plot.title = element_text(hjust = 0.5),
+    title = element_text(size = 12, face = "bold", family = "Noto Sans KR")
+  )
+
+```
+
+### 추천항공권 Best10
+```{r}
+
+df2 <- flightinfo2 %>% arrange(ticket.price2,from.duration2,to.duration2) %>% select(from.date,to.date,airlines2,ticket.price,from.duration,to.duration,stop.city2) %>% slice(1:10)
+
+names(df2) <- c("출발일","도착일","항공사","가격","소요시간(가는날)","소요시간(오는날)","경유지")
+
+df2 %>%
+  kable(format="html", escape=FALSE) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),position = "center",fixed_thead = T) %>%
+  column_spec(1, width = "6em") %>% 
+  column_spec(2, width = "6em") %>% 
+  column_spec(3, width = "8em") %>% 
+  column_spec(4, width = "8em") %>% 
+  column_spec(5, width = "10em") %>%
+  column_spec(6, width = "10em") %>% 
+  column_spec(7, width = "6em")
+
+?column_spec
+```
+
+
+
+Row {data-height=400}
+-----------------------------------------------------------------------
+
+###
+
+```{r}
+search.word <- "코펜하겐" %>% enc2utf8()
+
+URL <- str_c("https://search.naver.com/search.naver?query=",search.word,"&nso=&where=blog&sm=tab_opt")
+
+res <- read_html(URL)
+pattern <- ".total_tit"
+title <- res %>% 
+  html_nodes(pattern) %>% 
+  html_text()
+
+pattern <- ".total_tit"
+
+link <- res %>% 
+  html_nodes(pattern) %>% 
+  html_attr("href")
+
+tab <- cbind(title, link) %>% as_tibble()
+
+df <- tab %>%
+  mutate(title.link = cell_spec(title, "html", link = link, color="#062872")) %>%
+  select(title.link)
+
+names(df) <- "네이버 BLOG"
+
+df %>%
+  kable(format="html", escape=FALSE) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+  column_spec(1, width = "50em")
+
+
+```
+
+###
+
+```{r}
+df3 <- flightinfo2 %>% group_by(stop.city2,airlines2,from.stop.duration,to.stop.duration) %>% summarise("노선 수"=n())
+
+names(df3) <- c("경유지","항공사","경유시간(가는날)","경유시간(오는날)","노선수")
+
+df3 %>%
+  kable(format="html", escape=FALSE) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),full_width = F, position = "center",fixed_thead = T) %>%
+  column_spec(1, width = "10em") %>% 
+  column_spec(2, width = "10em") %>% 
+  column_spec(3, width = "10em") %>% 
+  column_spec(4, width = "10em") %>%
+  column_spec(4, width = "10em")
+```
+
